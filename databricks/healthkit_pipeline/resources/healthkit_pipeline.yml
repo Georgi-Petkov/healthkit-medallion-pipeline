@@ -1,0 +1,13 @@
+resources:
+  pipelines:
+    healthkit_silver_pipeline:
+      name: healthkit_silver_pipeline
+      catalog: healthkit
+      schema: silver
+      serverless: true
+      photon: true
+      libraries:
+        - file:
+            path: ../src/healthkit_silver_pipeline.py
+      configuration:
+        pipelines.reset.allowed: "false"

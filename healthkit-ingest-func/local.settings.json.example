@@ -1,0 +1,10 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "ADLS_ACCOUNT_URL": "https://healthkitdatalake.dfs.core.windows.net",
+    "BRONZE_CONTAINER": "bronze",
+    "HEALTHKIT_API_KEY": "local-dev-only-placeholder"
+  }
+}

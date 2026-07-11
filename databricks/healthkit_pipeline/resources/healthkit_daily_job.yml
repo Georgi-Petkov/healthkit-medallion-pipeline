@@ -1,0 +1,30 @@
+resources:
+  jobs:
+    healthkit_daily_medallion_refresh:
+      name: healthkit_daily_medallion_refresh
+      schedule:
+        quartz_cron_expression: "0 0 5 * * ?"
+        timezone_id: "UTC"
+        pause_status: UNPAUSED
+      environments:
+        - environment_key: serverless_env
+          spec:
+            client: "1"
+      git_source:
+        git_url: https://github.com/Georgi-Petkov/healthkit-medallion-pipeline
+        git_provider: gitHub
+        git_branch: main
+      tasks:
+        - task_key: refresh_silver
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.healthkit_silver_pipeline.id}
+        - task_key: build_gold
+          depends_on:
+            - task_key: refresh_silver
+          environment_key: serverless_env
+          dbt_task:
+            project_directory: dbt/healthkit
+            commands:
+              - "dbt deps"
+              - "dbt build"
+            warehouse_id: 997b45263de388bd

@@ -1,0 +1,4 @@
+sqlalchemy>=2.0
+databricks-sqlalchemy>=2.0
+pandas>=2.0
+ipykernel>=6.0

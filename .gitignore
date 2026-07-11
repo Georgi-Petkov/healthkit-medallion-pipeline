@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.python_packages/
+.pytest_cache/
+.ruff_cache/
+
+# Azure Functions
+local.settings.json
+bin/
+obj/
+
+# dbt
+target/
+dbt_packages/
+logs/
+.user.yml
+
+# Databricks Asset Bundles
+.databricks/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# secrets - never commit these
+.env
+*.pem
+*.key

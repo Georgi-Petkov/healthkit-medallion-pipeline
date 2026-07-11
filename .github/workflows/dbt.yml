@@ -1,0 +1,58 @@
+name: dbt
+
+on:
+  pull_request:
+    paths:
+      - 'dbt/**'
+      - '.github/workflows/dbt.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+defaults:
+  run:
+    working-directory: dbt/healthkit
+
+env:
+  DBT_PROFILES_DIR: .
+  DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+  DATABRICKS_HTTP_PATH: ${{ vars.DATABRICKS_HTTP_PATH }}
+  DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dbt
+        run: pip install dbt-databricks
+
+      - name: Azure login (OIDC, no stored secret)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Fetch Databricks client secret from Key Vault
+        run: |
+          echo "DATABRICKS_CLIENT_SECRET=$(az keyvault secret show \
+            --vault-name healthkit-ingest-kv \
+            --name dbt-databricks-client-secret \
+            --query value -o tsv)" >> "$GITHUB_ENV"
+
+      - name: dbt deps
+        run: dbt deps
+
+      - name: dbt build (run + test)
+        run: dbt build
+
+      - name: dbt source freshness
+        run: dbt source freshness
+        continue-on-error: true

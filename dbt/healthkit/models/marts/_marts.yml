@@ -1,0 +1,39 @@
+version: 2
+
+models:
+  - name: fct_daily_activity_summary
+    description: One row per calendar day with key activity/vitals metrics pivoted into columns.
+    columns:
+      - name: metric_date
+        description: Calendar day.
+        tests:
+          - not_null
+          - unique
+      - name: total_steps
+        description: Total step count for the day.
+      - name: metrics_present
+        description: Count of distinct metric types with at least one datapoint that day.
+        tests:
+          - not_null
+
+  - name: fct_weekly_trends
+    description: Week-over-week activity trend, with absolute and percent change vs. the prior week.
+    columns:
+      - name: week_start
+        description: Start of the ISO week (Monday).
+        tests:
+          - not_null
+          - unique
+
+  - name: fct_metric_freshness
+    description: Per-metric coverage and staleness, for monitoring pipeline/data health.
+    columns:
+      - name: metric_name
+        description: HealthKit metric identifier.
+        tests:
+          - not_null
+          - unique
+      - name: days_since_last_data
+        description: Days between the metric's most recent datapoint and today. Large values indicate a metric has stopped syncing.
+        tests:
+          - not_null

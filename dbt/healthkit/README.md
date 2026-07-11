@@ -81,3 +81,5 @@ pip install -r scripts/requirements.txt
 python3 -m ipykernel install --user --name healthkit-dbt --display-name "healthkit (dbt venv)"
 # then open scripts/query_gold.ipynb and select the "healthkit (dbt venv)" kernel
 ```
+
+<!-- CI verification commit -->

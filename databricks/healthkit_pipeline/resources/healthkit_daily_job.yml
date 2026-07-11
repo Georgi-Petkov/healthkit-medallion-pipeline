@@ -10,6 +10,8 @@ resources:
         - environment_key: serverless_env
           spec:
             client: "1"
+            dependencies:
+              - dbt-databricks
       git_source:
         git_url: https://github.com/Georgi-Petkov/healthkit-medallion-pipeline
         git_provider: gitHub
@@ -28,3 +30,5 @@ resources:
               - "dbt deps"
               - "dbt build"
             warehouse_id: 997b45263de388bd
+            catalog: healthkit
+            schema: gold

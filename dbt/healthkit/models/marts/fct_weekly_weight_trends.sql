@@ -4,7 +4,8 @@
 -- exactly those 3 - no forward-filled/padded values are included), so
 -- single-day noise like water weight gets smoothed without ever fabricating
 -- data for days that haven't been weighed in yet. Then compute
--- week-over-week change on those weekly averages.
+-- week-over-week change on those weekly averages, plus HTML-formatted
+-- colored-arrow display columns replicating the notebook's annotate_loss().
 with daily_readings as (
 
     select
@@ -92,7 +93,7 @@ with_trend as (
         weight_kg,
         body_fat_pct,
         weight_kg - lag(weight_kg) over (order by week_end_date) as weekly_weight_change_kg,
-        body_fat_pct - lag(body_fat_pct) over (order by week_end_date) as weekly_body_fat_change_pct
+        body_fat_pct - lag(body_fat_pct) over (order by week_end_date) as weekly_body_fat_change_pp
     from weekly
 
 )
@@ -103,6 +104,8 @@ select
     round(weight_kg, 2) as weight_kg,
     round(weekly_weight_change_kg, 2) as weekly_weight_change_kg,
     round(body_fat_pct, 2) as body_fat_pct,
-    round(weekly_body_fat_change_pct, 2) as weekly_body_fat_change_pct
+    round(weekly_body_fat_change_pp, 2) as weekly_body_fat_change_pp,
+    {{ color_change('weekly_weight_change_kg') }} as weekly_weight_change_display,
+    {{ color_change('weekly_body_fat_change_pp') }} as weekly_body_fat_change_display
 from with_trend
 order by week_end_date

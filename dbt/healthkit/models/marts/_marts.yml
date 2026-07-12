@@ -26,7 +26,7 @@ models:
           - unique
 
   - name: fct_weekly_weight_trends
-    description: Weekly average weight & body fat, forward-filled to a daily series before averaging, with week-over-week change.
+    description: Weekly average weight & body fat (averaged over whatever real readings fall in that ISO week - no forward-fill/padding), with week-over-week change.
     columns:
       - name: year_week
         description: "ISO year-week label, e.g. 2026-W03."
@@ -37,6 +37,8 @@ models:
         description: Last calendar date in the ISO week.
         tests:
           - not_null
+      - name: weekly_body_fat_change_pp
+        description: Change in average body fat percentage vs. the prior week, in percentage points (not percent change) - e.g. 11.5% -> 11.0% is -0.5, not -4.3%.
 
   - name: fct_metric_freshness
     description: Per-metric coverage and staleness, for monitoring pipeline/data health.

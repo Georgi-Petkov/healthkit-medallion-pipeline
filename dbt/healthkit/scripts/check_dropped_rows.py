@@ -2,6 +2,10 @@
 """Ad hoc: check how many rows the Silver Lakeflow pipeline has dropped via
 its data-quality expectations (valid_metric_name, valid_date).
 
+Shows both the latest incremental batch (Autoloader only processes new
+Bronze files each run, so this is usually a small number - NOT the size of
+the table) and the all-time cumulative total across every recorded batch.
+
 Auth: SQLAlchemy's databricks dialect with auth_type=azure-cli, i.e. your
 local `az login` session - no token or secret needed.
 
@@ -43,7 +47,7 @@ DATABRICKS_HOST = "adb-7405605320524740.0.azuredatabricks.net"
 HTTP_PATH = "/sql/1.0/warehouses/997b45263de388bd"
 PIPELINE_ID = "f7550c31-7051-4c6a-a4f2-00d095261599"
 
-QUERY = f"""
+LATEST_BATCH_QUERY = f"""
 WITH latest_dq_event AS (
   SELECT timestamp, details:flow_progress:data_quality:expectations as expectations
   FROM event_log('{PIPELINE_ID}')
@@ -66,6 +70,28 @@ FROM (
 )
 """
 
+CUMULATIVE_QUERY = f"""
+WITH all_dq_events AS (
+  SELECT details:flow_progress:data_quality:expectations as expectations
+  FROM event_log('{PIPELINE_ID}')
+  WHERE event_type = 'flow_progress'
+    AND details:flow_progress:data_quality:expectations IS NOT NULL
+)
+SELECT
+  row_expectations.name as expectation,
+  count(*) as num_batches,
+  SUM(row_expectations.passed_records) as cumulative_passed,
+  SUM(row_expectations.failed_records) as cumulative_dropped
+FROM (
+  SELECT explode(from_json(
+    expectations,
+    "array<struct<name: string, dataset: string, passed_records: int, failed_records: int>>"
+  )) as row_expectations
+  FROM all_dq_events
+)
+GROUP BY row_expectations.name
+"""
+
 
 def main() -> None:
     engine = create_engine(
@@ -73,17 +99,28 @@ def main() -> None:
         connect_args={"auth_type": "azure-cli", "enable_telemetry": False},
     )
     with engine.connect() as conn:
-        rows = conn.execute(text(QUERY)).fetchall()
+        latest_rows = conn.execute(text(LATEST_BATCH_QUERY)).fetchall()
+        cumulative_rows = conn.execute(text(CUMULATIVE_QUERY)).fetchall()
 
-    if not rows:
+    if not latest_rows:
         print("No data-quality expectation results found yet - has the pipeline run?")
         return
 
-    for r in rows:
-        print(f"{r.dataset} | {r.expectation}: {r.dropped_records} dropped / {r.passed_records} passed")
+    print("Latest incremental batch (Autoloader only processes new files each")
+    print("run, so this reflects the most recent sync, not the whole table):")
+    for r in latest_rows:
+        print(f"  {r.dataset} | {r.expectation}: {r.dropped_records} dropped / {r.passed_records} passed")
+    latest_total_dropped = sum(r.dropped_records for r in latest_rows)
+    print(f"  Total dropped in latest batch: {latest_total_dropped}")
 
-    total_dropped = sum(r.dropped_records for r in rows)
-    print(f"\nTotal dropped rows (latest pipeline run): {total_dropped}")
+    print("\nAll-time cumulative (summed across every recorded batch):")
+    for r in cumulative_rows:
+        print(
+            f"  {r.expectation}: {r.cumulative_dropped} dropped / {r.cumulative_passed} passed "
+            f"across {r.num_batches} batches"
+        )
+    cumulative_total_dropped = sum(r.cumulative_dropped for r in cumulative_rows)
+    print(f"  Total dropped all-time: {cumulative_total_dropped}")
 
 
 if __name__ == "__main__":

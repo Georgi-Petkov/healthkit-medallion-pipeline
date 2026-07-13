@@ -26,6 +26,15 @@ cleaned as (
         value_min,
         value_max,
         coalesce(value_qty, value_avg) as value,
+        -- Health Auto Export emits one extra datapoint per day, per metric,
+        -- timestamped at exactly local 00:00:00 - a daily-granularity
+        -- rollup (the full day's total/average), alongside the genuine
+        -- intraday breakdown points (arbitrary sync times like 08:07:39).
+        -- Downstream daily aggregations must prefer this rollup value over
+        -- summing/averaging it together with the intraday points, or every
+        -- cumulative metric (steps, active energy, etc.) gets silently
+        -- double-counted. See fct_daily_activity_summary.
+        substring(get_json_object(value_raw, '$.date'), 12, 8) = '00:00:00' as is_daily_rollup,
         source_file,
         ingested_at
 

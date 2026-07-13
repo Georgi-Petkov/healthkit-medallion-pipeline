@@ -11,3 +11,8 @@ resources:
             path: ../src/healthkit_silver_pipeline.py
       configuration:
         pipelines.reset.allowed: "false"
+      notifications:
+        - alerts:
+            - on-update-failure
+          email_recipients:
+            - 2georgipetkov@gmail.com

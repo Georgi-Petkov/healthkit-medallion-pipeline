@@ -3,6 +3,8 @@ version: 2
 models:
   - name: fct_daily_activity_summary
     description: One row per calendar day with key activity/vitals metrics pivoted into columns.
+    tests:
+      - assert_daily_totals_match_rollup_when_present
     columns:
       - name: metric_date
         description: Calendar day.
@@ -11,6 +13,74 @@ models:
           - unique
       - name: total_steps
         description: Total step count for the day.
+        tests:
+          - within_range:
+              arguments:
+                min_value: 0
+                max_value: 60000
+      - name: active_energy_kcal
+        description: Active (non-basal) energy burned for the day, in kcal.
+        tests:
+          - within_range:
+              arguments:
+                min_value: 0
+                max_value: 6000
+      - name: exercise_minutes
+        description: Apple "exercise" minutes for the day.
+        tests:
+          - within_range:
+              arguments:
+                min_value: 0
+                max_value: 600
+      - name: stand_minutes
+        description: Total minutes standing for the day.
+        tests:
+          - within_range:
+              arguments:
+                min_value: 0
+                max_value: 1440
+      - name: flights_climbed
+        description: Flights of stairs climbed for the day.
+        tests:
+          - within_range:
+              arguments:
+                min_value: 0
+                max_value: 300
+      - name: distance_km
+        description: Walking/running distance for the day, in km.
+        tests:
+          - within_range:
+              arguments:
+                min_value: 0
+                max_value: 200
+      - name: avg_heart_rate_bpm
+        description: Average heart rate for the day, in bpm.
+        tests:
+          - within_range:
+              arguments:
+                min_value: 30
+                max_value: 220
+      - name: resting_heart_rate_bpm
+        description: Resting heart rate for the day, in bpm.
+        tests:
+          - within_range:
+              arguments:
+                min_value: 30
+                max_value: 120
+      - name: avg_hrv_ms
+        description: Average heart rate variability for the day, in ms (SDNN).
+        tests:
+          - within_range:
+              arguments:
+                min_value: 0
+                max_value: 300
+      - name: weight_kg
+        description: Body weight for the day, in kg.
+        tests:
+          - within_range:
+              arguments:
+                min_value: 20
+                max_value: 300
       - name: metrics_present
         description: Count of distinct metric types with at least one datapoint that day.
         tests:

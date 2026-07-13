@@ -6,6 +6,10 @@ resources:
         quartz_cron_expression: "0 0 5 * * ?"
         timezone_id: "UTC"
         pause_status: UNPAUSED
+      email_notifications:
+        on_failure:
+          - 2georgipetkov@gmail.com
+        no_alert_for_skipped_runs: true
       environments:
         - environment_key: serverless_env
           spec:

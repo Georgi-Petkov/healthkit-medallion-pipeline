@@ -68,9 +68,18 @@ def silver_healthkit_metrics_staging():
 
 
 # --- Current-state table: latest value wins per (metric_name, date). ---
-# sequence_by=file_modification_time means a re-sent/overlapping export only
-# overwrites a row if it's from a file modified more recently than what's
-# already there, so re-running an overlapping backfill export is safe.
+# sequence_by is a composite struct: primarily file_modification_time (a
+# re-sent/overlapping export only overwrites a row if it's from a file
+# modified more recently than what's already there, so re-running an
+# overlapping backfill export is safe), with coalesce(value_qty, value_avg)
+# as a tie-break for the rare case where two Bronze files land in the same
+# second - e.g. Health Auto Export's batched sync occasionally reports the
+# still-accumulating current hour twice, once per simultaneous POST, with
+# a slightly different value each time. Since these are all
+# monotonically-accumulating-within-the-hour metrics (steps, kcal burned,
+# minutes, etc.), the higher value is always the more complete one, never
+# a conflicting independent measurement - so ties resolve deterministically
+# to MAX instead of an arbitrary (and previously inconsistent) pick.
 dp.create_streaming_table(
     name="healthkit_metrics",
     comment="Deduped, current-value HealthKit metric datapoints. One row per (metric_name, date).",
@@ -80,7 +89,10 @@ dp.create_auto_cdc_flow(
     target="healthkit_metrics",
     source="silver_healthkit_metrics_staging",
     keys=["metric_name", "date"],
-    sequence_by="file_modification_time",
+    sequence_by=F.struct(
+        F.col("file_modification_time"),
+        F.coalesce(F.col("value_qty"), F.col("value_avg")),
+    ),
     stored_as_scd_type="1",
 )
 

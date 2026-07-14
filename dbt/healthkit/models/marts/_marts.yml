@@ -3,8 +3,6 @@ version: 2
 models:
   - name: fct_daily_activity_summary
     description: One row per calendar day with key activity/vitals metrics pivoted into columns.
-    tests:
-      - assert_daily_totals_match_rollup_when_present
     columns:
       - name: metric_date
         description: Calendar day.

@@ -43,15 +43,33 @@ readings_exploded as (
 
 )
 
-select
-    metric_name,
-    units,
-    try_to_timestamp(reading:date::string, 'yyyy-MM-dd HH:mm:ss XX') as date,
-    try_cast(reading:qty::string as double) as value_qty,
-    try_cast(coalesce(reading:Avg::string, reading:avg::string) as double) as value_avg,
-    try_cast(coalesce(reading:Min::string, reading:min::string) as double) as value_min,
-    try_cast(coalesce(reading:Max::string, reading:max::string) as double) as value_max,
-    to_json(reading) as value_raw,
-    _source_file as source_file,
-    _ingested_at as ingested_at
-from readings_exploded
+deduped as (
+
+    select
+        metric_name,
+        units,
+        try_to_timestamp(reading:date::string, 'yyyy-MM-dd HH:mm:ss XX') as date,
+        try_cast(reading:qty::string as double) as value_qty,
+        try_cast(coalesce(reading:Avg::string, reading:avg::string) as double) as value_avg,
+        try_cast(coalesce(reading:Min::string, reading:min::string) as double) as value_min,
+        try_cast(coalesce(reading:Max::string, reading:max::string) as double) as value_max,
+        to_json(reading) as value_raw,
+        _source_file as source_file,
+        _ingested_at as ingested_at
+    from readings_exploded
+    -- The same (metric_name, date) reading can land twice if the user re-runs
+    -- an overlapping Health Auto Export backfill -- two different Bronze
+    -- files, same underlying datapoint. _ingested_at is current_timestamp()
+    -- at Auto Loader processing time (see databricks/free_edition_notebooks/
+    -- bronze_ingest.py), so "most recently processed wins" is the same
+    -- recency semantics the original Lakeflow pipeline's Auto CDC
+    -- (sequence_by file_modification_time) used, just keyed on ingestion
+    -- order instead of file mtime.
+    qualify row_number() over (
+        partition by metric_name, try_to_timestamp(reading:date::string, 'yyyy-MM-dd HH:mm:ss XX')
+        order by _ingested_at desc
+    ) = 1
+
+)
+
+select * from deduped

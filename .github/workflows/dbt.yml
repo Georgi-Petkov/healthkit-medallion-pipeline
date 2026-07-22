@@ -7,7 +7,6 @@ on:
       - '.github/workflows/dbt.yml'
 
 permissions:
-  id-token: write
   contents: read
 
 defaults:
@@ -18,7 +17,7 @@ env:
   DBT_PROFILES_DIR: .
   DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
   DATABRICKS_HTTP_PATH: ${{ vars.DATABRICKS_HTTP_PATH }}
-  DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+  DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
 
 jobs:
   build-and-test:
@@ -32,20 +31,6 @@ jobs:
 
       - name: Install dbt
         run: pip install dbt-databricks
-
-      - name: Azure login (OIDC, no stored secret)
-        uses: azure/login@v2
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Fetch Databricks client secret from Key Vault
-        run: |
-          echo "DATABRICKS_CLIENT_SECRET=$(az keyvault secret show \
-            --vault-name healthkit-ingest-kv \
-            --name dbt-databricks-client-secret \
-            --query value -o tsv)" >> "$GITHUB_ENV"
 
       - name: dbt deps
         run: dbt deps

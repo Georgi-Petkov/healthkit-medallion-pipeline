@@ -19,13 +19,17 @@ Google Drive                                    ← replaces the old Azure Funct
         │  + Auto Loader (cloudFiles), scheduled daily
         ▼
 BRONZE   workspace.healthkit.bronze_health_export   (Delta, Unity Catalog)
-        │  dbt — VARIANT explode (parse_json + variant_explode)
+        │  dbt — VARIANT explode + dedup (parse_json + variant_explode)
         ▼
 SILVER   dbt views: base_healthkit_metrics → stg_healthkit_metrics
-        │  dbt (gold marts)
+        │  dbt (gold marts), scheduled daily
         ▼
 GOLD     dbt marts: daily activity summary, weekly trends, metric freshness
 ```
+
+Both the Bronze ingestion and the Gold dbt refresh run on their own daily
+Databricks Job schedule (05:00 / 06:00 Europe/Copenhagen) — nothing here
+requires a manual trigger to stay current.
 
 **Start here:** [`PIPELINE_ARCHITECTURE.md`](PIPELINE_ARCHITECTURE.md) —
 a detailed walkthrough of exactly what happens at each layer, what's
@@ -35,23 +39,27 @@ since it's the more hardened of the two).
 
 ## Layout
 
-- `dbt/healthkit/` — the whole pipeline that's actually live: Bronze→Silver
-  VARIANT-explode model, Silver→Gold transforms, tests, docs
+- `dbt/healthkit/` — the whole transform pipeline that's actually live:
+  Bronze→Silver VARIANT-explode model (with dedup), Silver→Gold transforms,
+  tests, docs
+- `databricks/free_edition_notebooks/` — the two notebooks that actually run
+  on a schedule in the live workspace: `bronze_ingest.py` (Auto Loader from
+  Google Drive) and `run_dbt_gold.py` (clones this repo fresh each run,
+  `dbt build`s it). Exported via `databricks workspace export`/imported via
+  `databricks workspace import` — not deployed through Asset Bundles the way
+  the retired Lakeflow pipeline was.
 - `healthkit-ingest-func/` — **retired**, Azure Function ingestion (Health
   Auto Export → HTTPS POST → ADLS). Replaced by the Google Drive connector;
   kept in the repo as a reference implementation, not currently deployed.
 - `databricks/healthkit_pipeline/` — **retired**, Databricks Lakeflow
   Declarative Pipeline (Bronze → Silver with Auto CDC dedup). Replaced by
-  the dbt VARIANT-explode model above; kept as a reference implementation,
-  not currently deployed. Note: the current dbt Silver model does **not**
-  reimplement the Auto CDC dedup this pipeline did — see
-  `PIPELINE_ARCHITECTURE.md` for what that trade-off actually means.
-- `.github/workflows/` — CI for the (retired) Function App and for dbt.
-  The dbt workflow still targets the old Azure OIDC/Key Vault auth chain and
-  needs updating for the new Free Edition token auth before it'll pass again.
-- The Bronze ingestion notebook itself lives only in the Databricks
-  workspace (uploaded directly, not deployed from this repo) — not yet
-  pulled into version control here.
+  the dbt VARIANT-explode model above (which now has its own dedup step,
+  keyed on Auto Loader ingestion order rather than file mtime); kept as a
+  reference implementation, not currently deployed.
+- `.github/workflows/` — CI for the (retired) Function App and for dbt. The
+  dbt workflow now authenticates with the same token auth `profiles.yml`
+  uses locally (a `DATABRICKS_TOKEN` repo secret), runs on every PR touching
+  `dbt/**` and on every push to `main`.
 
 ## Security notes
 

@@ -26,10 +26,11 @@ Google Drive                                    ← replaces the Azure Function
         │  + Auto Loader (cloudFiles), scheduled daily 05:00 Europe/Copenhagen
         ▼
 BRONZE   workspace.healthkit.bronze_health_export   (Delta, Unity Catalog)
-        │  dbt: parse_json + variant_explode (base_healthkit_metrics.sql)
+        │  dbt: parse_json + variant_explode + dedup (base_healthkit_metrics.sql)
         ▼
 SILVER   dbt views: base_healthkit_metrics → stg_healthkit_metrics
         │  dbt (gold marts, unchanged from the original design)
+        │  scheduled daily 06:00 Europe/Copenhagen
         ▼
 GOLD     fct_daily_activity_summary / fct_weekly_trends / fct_metric_freshness
 ```
@@ -53,27 +54,28 @@ identity chain for that hop — in exchange for depending on a Databricks
 Warehouse-compatible, notebook/cluster access only, which is part of why the
 serverless-notebook path was the one built out).
 
-**What this rebuild does *not* carry over from the original design** (be
-ready for this in an interview — see the original Layer 1 below for what's
-being traded off):
-- **No dedup/Auto CDC equivalent.** The original Lakeflow pipeline deduped
-  overlapping/re-synced exports on `(metric_name, date)`, keyed by file
-  recency. The current `base_healthkit_metrics.sql` → `stg_healthkit_metrics.sql`
-  path does not — it's a straight explode, no merge step. In practice this
-  hasn't caused an observed problem (Google Drive sync doesn't tend to
-  produce the overlapping-manual-export scenario the original dedup was
-  built for), but it's a real capability gap, not a stylistic choice.
-- **The Bronze ingestion notebook itself isn't in this repo.** It was
-  uploaded directly to the Databricks workspace (`databricks workspace
-  import`), not deployed from version-controlled source the way the
-  Lakeflow pipeline was via Databricks Asset Bundles. Pulling it into
-  `databricks/` via `databricks workspace export` is a straightforward
-  follow-up, not yet done.
-- **CI is stale.** `.github/workflows/dbt.yml` still authenticates via the
-  old Azure OIDC → Key Vault chain to fetch a Databricks OAuth client
-  secret — both the Key Vault and that auth pattern are gone. It needs a
-  GitHub Actions secret holding the new Databricks token before it'll run
-  green again.
+**What this rebuild changed vs. the original design** (see the original
+Layer 1 below for the design being traded off against):
+- **Dedup is reimplemented, differently keyed.** The original Lakeflow
+  pipeline deduped overlapping/re-synced exports on `(metric_name, date)` via
+  Auto CDC, keyed by `file_modification_time`. `base_healthkit_metrics.sql`
+  does the same dedup with a `qualify row_number() ... = 1` window function,
+  keyed on `_ingested_at` (the Auto Loader's `current_timestamp()` at
+  processing time) instead of file mtime — same "most recent wins" semantics,
+  different recency signal, no separate CDC/merge infrastructure needed.
+- **The Bronze and Gold notebooks are in version control**: both
+  `databricks/free_edition_notebooks/bronze_ingest.py` and `run_dbt_gold.py`
+  are exported from/imported to the live workspace via `databricks workspace
+  export`/`import`, rather than deployed through Databricks Asset Bundles the
+  way the Lakeflow pipeline was.
+- **CI is current**: `.github/workflows/dbt.yml` authenticates with the same
+  token auth `profiles.yml` uses locally, via a `DATABRICKS_TOKEN` repo
+  secret — verified with a real PR against the new workspace (caught and
+  fixed a real CTE syntax bug in `base_healthkit_metrics.sql` in the
+  process). Runs on every PR touching `dbt/**` and on every push to `main`.
+- **Gold is scheduled**, not just Bronze: a second Databricks Job
+  (`healthkit-gold-daily-refresh`) clones the repo fresh and runs
+  `dbt build` daily at 06:00 Europe/Copenhagen, an hour after Bronze lands.
 
 ---
 
@@ -356,14 +358,15 @@ present as equivalent hardening. Unity Catalog structure is one catalog
   push/PR touching the Function code; deploys via
   `func azure functionapp publish` on merge to `main` only. Verified with a
   real push → real deploy, back when the Function App was live.
-- `.github/workflows/dbt.yml` — `dbt build` + `dbt test` on every PR
-  touching the dbt project. Verified with a real test PR (opened, CI ran
-  green, merged) **against the original Azure workspace**. Currently
-  **stale**: it authenticates via Azure OIDC → Key Vault to fetch a
-  Databricks OAuth client secret, and both the Key Vault and that auth
-  pattern are gone with the teardown. Needs a GitHub Actions secret holding
-  the new Databricks token (matching `profiles.yml`'s `auth_type: token`)
-  before it'll pass again — not yet done.
+- `.github/workflows/dbt.yml` — `dbt build` + `dbt test` on every PR touching
+  the dbt project, and on every push to `main`. Originally verified against
+  the Azure workspace via Azure OIDC → Key Vault auth; repointed to the
+  Free Edition workspace on 2026-07-22 using the same token auth
+  `profiles.yml` uses locally (a `DATABRICKS_TOKEN` repo secret). Verified
+  with a real PR — first run caught a genuine CTE syntax bug (missing comma
+  between two CTEs in `base_healthkit_metrics.sql`, introduced by the dedup
+  change), fixed, second run green, merged. That's CI doing its job, not
+  a formality.
 - Branch protection is **not** configured — GitHub's branch-protection API
   is blocked on private repos below the Pro tier; the exact `gh api` command
   to enable it once eligible is in the repo's setup notes.
@@ -372,33 +375,29 @@ present as equivalent hardening. Unity Catalog structure is one catalog
 
 ## What's *not* automated (be ready for this question)
 
-Current state, not the original design's:
+Current state, not the original design's. As of 2026-07-22, the list that
+used to be here (Gold not scheduled, CI stale, no dedup, notebook not in
+git) is closed — see "Current architecture" at the top of this document for
+what replaced each. What's still genuinely open:
 
-- **Gold marts require a manual `dbt run`.** Bronze ingestion *is* scheduled
-  (daily 05:00 Europe/Copenhagen) and Silver is a view that's always live,
-  but nothing currently triggers `dbt run`/`dbt build` on a schedule to
-  refresh the Gold tables — that's the automation gap today, not Bronze.
-- **CI is stale** (see CI/CD above) — needs new Databricks-token auth wired
-  in before it'll run green again.
-- **No dedup/merge step** in the current Bronze→Silver model — see "Current
-  architecture" at the top of this document.
-- **The Bronze ingestion notebook isn't in version control** — lives only in
-  the Databricks workspace.
 - No alerting is wired to `fct_metric_freshness` — the data exists to power
   an alert, but nothing currently reads it proactively.
 - Silver has no reprocessing/backfill tooling beyond re-running the whole
   pipeline; there's no targeted "reprocess just this date range" path.
+- No SCD Type 2 / change-history table in the current live design — see the
+  interview-question answer below for what that trade-off means.
+- Branch protection still isn't configured on the GitHub repo (same
+  Pro-tier limitation as the original design).
 
 ## Likely interview questions and where the answer lives
 
-- *"How do you handle duplicate/retried data?"* → **In the original design**:
-  Bronze `content_sha256` for exact byte-level retries, Silver's Auto CDC
-  `sequence_by file_modification_time` dedup for the more realistic case of
-  overlapping exports (this was actually exercised in production). **In the
-  current live design, this isn't reimplemented** — a real, named gap, not
-  an oversight to gloss over. Good answer to "so fix it": add a
-  `qualify row_number() over (partition by metric_name, metric_date order by
-  ingested_at desc) = 1` to `base_healthkit_metrics.sql`.
+- *"How do you handle duplicate/retried data?"* → `base_healthkit_metrics.sql`
+  dedups on `(metric_name, date)` via `qualify row_number() over (... order by
+  _ingested_at desc) = 1`, keeping whichever Bronze file was processed most
+  recently — same "most recent wins" semantics as the original Lakeflow
+  pipeline's Auto CDC (`sequence_by file_modification_time`), just keyed on
+  Auto Loader ingestion order instead of file mtime, and implemented as a
+  plain window function instead of a separate CDC/merge pipeline stage.
 - *"Why medallion instead of writing straight to Gold?"* → Bronze is the
   immutable source of truth for replay/backfill; Silver is where schema and
   cleanup logic lives *once* instead of being reimplemented per mart; Gold is
@@ -406,13 +405,12 @@ Current state, not the original design's:
 - *"How would you handle a HealthKit revision to old data?"* → **Original
   design**: SCD Type 1 (`healthkit_metrics`) naturally overwrites to the
   latest-synced value; the `step_count_history` SCD Type 2 table demonstrated
-  full history-of-change tracking. Neither exists in the current live
-  design — the honest answer today is "the current Silver model always
-  reflects whatever's latest in Bronze, with no versioned history," and
-  rebuilding SCD2 in dbt (a snapshot) is the natural next step if that's
-  needed again.
-- *"What would you build next?"* → in priority order: schedule `dbt run` for
-  Gold (Bronze is scheduled, Gold isn't), reimplement dedup in
-  `base_healthkit_metrics.sql`, fix CI's auth for the new workspace, pull the
-  Bronze notebook into version control, wire `fct_metric_freshness` to an
-  actual alert.
+  full history-of-change tracking. The current live design's dedup step is
+  also effectively SCD Type 1 (latest `_ingested_at` wins), but there's no
+  SCD Type 2 equivalent yet — the honest answer is "no versioned history
+  today," and a dbt snapshot over `base_healthkit_metrics` is the natural way
+  to rebuild that if it's needed again.
+- *"What would you build next?"* → wire `fct_metric_freshness` to an actual
+  alert, add a dbt snapshot for change history, enable branch protection,
+  consider giving the CI job its own scoped Databricks token instead of
+  reusing the local-dev one.

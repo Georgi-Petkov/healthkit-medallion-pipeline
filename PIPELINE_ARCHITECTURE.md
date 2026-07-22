@@ -411,6 +411,6 @@ what replaced each. What's still genuinely open:
   today," and a dbt snapshot over `base_healthkit_metrics` is the natural way
   to rebuild that if it's needed again.
 - *"What would you build next?"* → wire `fct_metric_freshness` to an actual
-  alert, add a dbt snapshot for change history, enable branch protection,
-  consider giving the CI job its own scoped Databricks token instead of
-  reusing the local-dev one.
+  alert, add a dbt snapshot for change history, enable branch protection.
+  (CI already has its own dedicated Databricks token, separate from local
+  dev's, as of 2026-07-22 — see CI/CD above.)

@@ -22,6 +22,8 @@ env:
   DBT_PROFILES_DIR: .
   DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
   DATABRICKS_HTTP_PATH: ${{ vars.DATABRICKS_HTTP_PATH }}
+  # Dedicated CI token (not the same one dbt/healthkit/.env uses locally) --
+  # separate blast radius/audit trail, independently revocable.
   DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
 
 jobs:

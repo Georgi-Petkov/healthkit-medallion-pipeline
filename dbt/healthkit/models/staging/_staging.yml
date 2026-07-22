@@ -1,19 +1,22 @@
 version: 2
 
 sources:
-  - name: healthkit_silver
-    database: healthkit
-    schema: silver
+  - name: healthkit_bronze
+    database: workspace
+    schema: healthkit
     tables:
-      - name: healthkit_metrics
-        description: Deduped, current-value HealthKit metric datapoints produced by the Lakeflow Bronze->Silver pipeline.
+      - name: bronze_health_export
+        description: Raw Apple Health Auto Export JSON files, landed via Databricks Auto Loader from Google Drive. One row per exported file.
         config:
-          loaded_at_field: ingested_at
+          loaded_at_field: _ingested_at
           freshness:
             warn_after: {count: 26, period: hour}
             error_after: {count: 50, period: hour}
 
 models:
+  - name: base_healthkit_metrics
+    description: Bronze -> Silver. Explodes the nested Auto Export JSON (one row per exported day) into one row per (metric, reading) datapoint, using Databricks VARIANT parsing. This is the dbt-native replacement for what the original architecture's Lakeflow Declarative Pipeline did.
+
   - name: stg_healthkit_metrics
     description: Typed, cleaned staging model over the Silver healthkit_metrics table - one row per (metric_name, date).
     columns:

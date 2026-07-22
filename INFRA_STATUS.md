@@ -1,6 +1,14 @@
-# Infrastructure status: torn down 2026-07-18
+# Infrastructure status: rebuilt on Databricks Free Edition, $0/month (2026-07-22)
 
-All Azure infrastructure for this project was **intentionally deleted** on 2026-07-18 to stop an unexpected recurring cost. This was a deliberate decision, not an accident or outage — if you're reading this wondering why nothing works, this is why, and how to bring it back.
+**Current state: live and running, for free.** After the Azure teardown documented below, the pipeline was rebuilt from scratch on Databricks Free Edition — new ingestion path (Google Drive connector, replacing the Azure Function), new Bronze→Silver transform (dbt with Databricks VARIANT explode, replacing the Lakeflow Declarative Pipeline that depended on classic clusters Free Edition doesn't offer). Verified end-to-end at real scale: ~1M rows through Silver, all 25 dbt tests passing, Bronze ingestion scheduled daily. Full technical detail in [`PIPELINE_ARCHITECTURE.md`](PIPELINE_ARCHITECTURE.md)'s "Current architecture" section — including the capability trade-offs (no dedup step, CI not yet repointed, notebook not yet in git) that came with the free rebuild.
+
+The rest of this document is kept as-is: an accurate historical record of why and how the original Azure infrastructure was torn down on 2026-07-18. Nothing below describes the current running system.
+
+---
+
+## Original teardown (2026-07-18)
+
+All Azure infrastructure for this project was **intentionally deleted** on 2026-07-18 to stop an unexpected recurring cost. This was a deliberate decision, not an accident or outage — if you're reading this wondering why nothing works, this is why, and how to bring it back (or how it *was* brought back — see the current-state note above).
 
 ## Why
 
@@ -26,6 +34,13 @@ Confirmed via subscription-wide resource scan: zero resources with "healthkit" i
 **Nothing.** This was a full teardown by explicit instruction — no data preservation, no partial keep-list. All HealthKit data in the data lake is gone. The only thing that survives is the code and configuration in this repository (and its `MyHealthData` backup copy), which is why redeployment below is "recreate from scratch," not "restore."
 
 ## How to redeploy from scratch, if resumed later
+
+**Note: this plan was not the path actually taken.** The project resumed on
+Databricks Free Edition instead (see the top of this document) — cheaper but
+not a like-for-like restore of this Azure architecture. The steps below are
+kept for reference if a real Azure redeploy is ever wanted again (e.g. to
+restore the stronger managed-identity/Key Vault auth chain, or the Auto CDC
+dedup that the Free Edition rebuild doesn't have).
 
 1. Recreate the resource group and its resources (storage account with `bronze`/`silver`/`gold` containers, Key Vault, Function App, Databricks workspace) — none of this is currently defined as reusable IaC beyond the Databricks Asset Bundle (`databricks/healthkit_pipeline/`), so the Azure-native resources (storage, Key Vault, Function App, the workspace itself) need to be provisioned manually or scripted fresh.
 2. **Decide deliberately on the networking configuration this time** — the default (Secure Cluster Connectivity with a Databricks-managed VNet) is what caused this teardown. Consider explicitly setting `enableNoPublicIp: false` at creation time if cost matters more than the hardening it provides for a personal portfolio project, understanding Microsoft is moving toward making SCC mandatory long-term.

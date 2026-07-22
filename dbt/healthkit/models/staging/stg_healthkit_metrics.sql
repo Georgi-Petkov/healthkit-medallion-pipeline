@@ -1,6 +1,6 @@
 with source as (
 
-    select * from {{ source('healthkit_silver', 'healthkit_metrics') }}
+    select * from {{ ref('base_healthkit_metrics') }}
 
 ),
 

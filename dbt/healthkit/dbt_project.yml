@@ -17,7 +17,7 @@ models:
   healthkit:
     staging:
       +materialized: view
-      +schema: silver
+      +schema: healthkit_silver
     marts:
       +materialized: table
-      +schema: gold
+      +schema: healthkit_gold

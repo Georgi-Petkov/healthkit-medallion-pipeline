@@ -41,7 +41,7 @@ readings_exploded as (
     from metrics_exploded me,
     lateral variant_explode(me.readings) as r
 
-)
+),
 
 deduped as (
 

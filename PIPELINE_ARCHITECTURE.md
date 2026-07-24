@@ -21,9 +21,7 @@ iPhone (Health Auto Export app)
         │  auto-sync, JSON export
         ▼
 Google Drive                                    ← replaces the Azure Function
-        │  Databricks Unity Catalog Google Drive connection
-        │  (`autohealthexport`, Beta connector, OAuth_U2M)
-        │  + Auto Loader (cloudFiles), scheduled daily 05:00 Europe/Copenhagen
+        │  Google Drive API v3 + service account, scheduled daily 05:00 CPH
         ▼
 BRONZE   workspace.healthkit.bronze_health_export   (Delta, Unity Catalog)
         │  dbt: parse_json + variant_explode + dedup (base_healthkit_metrics.sql)
@@ -49,10 +47,38 @@ all 25 dbt tests passing.
 **Ingestion trigger also changed**: Auto Health Export now syncs to Google
 Drive instead of POSTing to a custom HTTPS endpoint. This drops the Azure
 Function entirely — no API key, no Function App to host, no managed
-identity chain for that hop — in exchange for depending on a Databricks
-**Beta** connector (Google Drive Unity Catalog connections aren't SQL
-Warehouse-compatible, notebook/cluster access only, which is part of why the
-serverless-notebook path was the one built out).
+identity chain for that hop.
+
+**Ingestion mechanism changed again, 2026-07-24 — a real platform limitation,
+diagnosed and worked around.** The original design used Databricks' Unity
+Catalog Google Drive connection (a Beta connector, OAuth_U2M). It worked
+during manual testing but **failed on every unattended scheduled run**,
+always with `IOException: Google Drive file system is not enabled`.
+Diagnosis, in order: renamed the connection to rule out a naming mismatch
+(no change) → revoked and re-granted access on the Google side to rule out a
+stale/corrupted grant (no change, verified directly from Google's "Access
+that you've given" page — fresh grant, correct scope, still failed
+identically) → created an entirely new connection object from scratch (same
+error, byte-for-byte). That ruled out everything credential-related and
+pointed at the connector's OAuth flow itself: it never requests
+`access_type=offline`, so Google never issues a refresh token (every
+connection showed `"Refresh token expiration": "Not provided by provider"`,
+confirmed via the API, not just the UI). Without a refresh token, the
+~1-hour access token had no way to renew between the once-daily 05:00
+schedule — it worked when freshly created because it happened to still be
+valid, and died on every run after.
+
+**Fix**: replaced the Beta connector entirely with a plain Google Drive API
+v3 client authenticated via a **service account key** (`databricks/
+free_edition_notebooks/bronze_ingest.py`) — service account credentials
+don't expire and need no interactive consent, so this failure mode doesn't
+exist for them. One more real gotcha surfaced during the fix: the Drive
+folder originally shared with Databricks only contains a single subfolder
+("Raw data") — the actual JSON files are one level deeper than the shared
+folder itself, which produced a silent "0 new files" result on the first
+test of the new ingestion path before the folder ID was corrected. The old
+connector-based notebook is kept as `bronze_ingest_v1_retired.py` for
+reference, not deployed.
 
 **What this rebuild changed vs. the original design** (see the original
 Layer 1 below for the design being traded off against):
@@ -414,3 +440,13 @@ what replaced each. What's still genuinely open:
   alert, add a dbt snapshot for change history, enable branch protection.
   (CI already has its own dedicated Databricks token, separate from local
   dev's, as of 2026-07-22 — see CI/CD above.)
+- *"Walk me through a real production bug you debugged"* → the Beta connector
+  incident (2026-07-24, "Current architecture" section above): a job that
+  passed manual testing but failed every unattended scheduled run, same
+  error every time. Isolated the cause by systematically eliminating
+  variables in order — connection naming, credential freshness (revoked and
+  re-granted access, verified directly against Google's own account page,
+  not just Databricks' UI), a brand-new connection from scratch — each ruling
+  out one hypothesis until only the connector's OAuth flow itself was left as
+  the explanation. The fix (service account, no expiry) came from
+  understanding *why* it failed, not from retrying the same setup and hoping.

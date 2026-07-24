@@ -1,62 +1,100 @@
 # Databricks notebook source
-# Bronze ingestion: Health Auto Export JSON files (Google Drive) -> Delta table
-# Incremental via Auto Loader (cloudFiles) so new daily files are picked up
-# without reprocessing everything each run.
+# Bronze ingestion: Health Auto Export JSON files via Google Drive API v3 + a
+# service account, landed into a Delta table. Replaces an earlier version that
+# used Databricks' Unity Catalog Google Drive Beta connector -- see
+# bronze_ingest_v1_retired.py for why that was abandoned (its OAuth flow never
+# requested offline access, so tokens couldn't auto-refresh between scheduled
+# runs). A service account key has no expiration and needs no interactive
+# consent, so it doesn't have that failure mode.
+#
+# Credentials: a service account JSON key, stored in the healthkit-dbt secret
+# scope, for a Google Cloud project with the Drive API enabled. The Health Auto
+# Export sync folder's "Raw data" subfolder is shared with the service
+# account's email as Viewer -- the top-level shared folder only contains that
+# one subfolder, so FOLDER_ID below points at the subfolder directly, not the
+# folder that was originally shared.
 
-GDRIVE_FOLDER = "https://drive.google.com/drive/folders/1Chpk-voGl9iJySpRFXOrn47CSlmDN-fs"
-CONNECTION_NAME = "autohealthexport"
+# MAGIC %pip install google-api-python-client google-auth
+
+# COMMAND ----------
+
+dbutils.library.restartPython()
+
+# COMMAND ----------
+
+FOLDER_ID = "13KCnFmFmNYJqKwONaW1fABkfUoP96H7I"  # "Raw data" subfolder
 TARGET_TABLE = "workspace.healthkit.bronze_health_export"
-CHECKPOINT_PATH = "/Volumes/workspace/healthkit/checkpoints/bronze_health_export"
-SCHEMA_LOCATION = "/Volumes/workspace/healthkit/checkpoints/bronze_health_export_schema"
 
 # COMMAND ----------
 
-spark.sql("CREATE SCHEMA IF NOT EXISTS workspace.healthkit")
-spark.sql("CREATE VOLUME IF NOT EXISTS workspace.healthkit.checkpoints")
+import json
 
-# COMMAND ----------
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
-# Diagnostic: confirm the connection actually returns files/rows on this compute
-# (this is the exact query from the SQL Editor attempt, now on a notebook instead
-# of a SQL Warehouse, which is what the Beta connector actually requires).
-diag = spark.sql(f"""
-    SELECT * FROM read_files(
-      '{GDRIVE_FOLDER}',
-      format => 'json',
-      `databricks.connection` => '{CONNECTION_NAME}',
-      pathGlobFilter => '*.json',
-      multiLine => true
-    )
-""")
-print(f"Diagnostic batch read: {diag.count()} rows")
-diag.printSchema()
-
-# COMMAND ----------
-
-from pyspark.sql import functions as F
-
-bronze_stream = (
-    spark.readStream
-    .format("cloudFiles")
-    .option("cloudFiles.format", "json")
-    .option("cloudFiles.schemaLocation", SCHEMA_LOCATION)
-    .option("databricks.connection", CONNECTION_NAME)
-    .option("multiLine", "true")
-    .option("pathGlobFilter", "*.json")
-    .load(GDRIVE_FOLDER)
-    .withColumn("_ingested_at", F.current_timestamp())
-    .withColumn("_source_file", F.col("_metadata.file_name"))
+sa_info = json.loads(dbutils.secrets.get("healthkit-dbt", "gdrive_service_account_json"))
+credentials = service_account.Credentials.from_service_account_info(
+    sa_info, scopes=["https://www.googleapis.com/auth/drive.readonly"]
 )
-
-(
-    bronze_stream.writeStream
-    .format("delta")
-    .option("checkpointLocation", CHECKPOINT_PATH)
-    .trigger(availableNow=True)
-    .toTable(TARGET_TABLE)
-)
+drive = build("drive", "v3", credentials=credentials)
 
 # COMMAND ----------
 
-result = spark.sql(f"SELECT COUNT(*) AS row_count, COUNT(DISTINCT _source_file) AS file_count FROM {TARGET_TABLE}")
-result.show()
+# Only fetch files not already landed in Bronze -- _source_file already tracks
+# this from the original Auto Loader-based ingestion, reused here so nothing
+# downstream needs to change.
+already_ingested = {
+    row._source_file
+    for row in spark.sql(f"SELECT DISTINCT _source_file FROM {TARGET_TABLE}").collect()
+}
+print(f"{len(already_ingested)} files already in Bronze")
+
+# COMMAND ----------
+
+results = drive.files().list(
+    q=f"'{FOLDER_ID}' in parents and trashed=false",
+    fields="files(id, name)",
+    pageSize=1000,
+).execute()
+all_files = [f for f in results.get("files", []) if f["name"].endswith(".json")]
+new_files = [f for f in all_files if f["name"] not in already_ingested]
+print(f"{len(all_files)} .json files in Drive folder, {len(new_files)} new")
+
+# COMMAND ----------
+
+import io
+from datetime import datetime, timezone
+
+from googleapiclient.http import MediaIoBaseDownload
+from pyspark.sql import Row
+from pyspark.sql.types import StructType, StructField, StringType, TimestampType
+
+schema = StructType([
+    StructField("data", StringType(), True),
+    StructField("_rescued_data", StringType(), True),
+    StructField("_ingested_at", TimestampType(), True),
+    StructField("_source_file", StringType(), True),
+])
+
+rows = []
+for f in new_files:
+    request = drive.files().get_media(fileId=f["id"])
+    buf = io.BytesIO()
+    downloader = MediaIoBaseDownload(buf, request)
+    done = False
+    while not done:
+        _, done = downloader.next_chunk()
+    content = buf.getvalue().decode("utf-8")
+    rows.append(Row(
+        data=content,
+        _rescued_data=None,
+        _ingested_at=datetime.now(timezone.utc),
+        _source_file=f["name"],
+    ))
+
+if rows:
+    df = spark.createDataFrame(rows, schema=schema)
+    df.write.format("delta").mode("append").saveAsTable(TARGET_TABLE)
+    print(f"Appended {len(rows)} new files to {TARGET_TABLE}")
+else:
+    print("No new files to ingest -- Bronze is already up to date")

@@ -15,8 +15,7 @@ iPhone (Health Auto Export app)
         │  auto-sync, JSON export
         ▼
 Google Drive                                    ← replaces the old Azure Function ingest
-        │  Databricks Unity Catalog Google Drive connection
-        │  + Auto Loader (cloudFiles), scheduled daily
+        │  Google Drive API v3 + service account, scheduled daily
         ▼
 BRONZE   workspace.healthkit.bronze_health_export   (Delta, Unity Catalog)
         │  dbt — VARIANT explode + dedup (parse_json + variant_explode)
@@ -43,13 +42,17 @@ since it's the more hardened of the two).
   Bronze→Silver VARIANT-explode model (with dedup), Silver→Gold transforms,
   tests, docs
 - `databricks/free_edition_notebooks/` — the two notebooks that actually run
-  on a schedule in the live workspace: `bronze_ingest.py` (Auto Loader from
-  Google Drive) and `run_dbt_gold.py` (clones this repo fresh each run,
-  `dbt build`s it). Exported via `databricks workspace export`/imported via
-  `databricks workspace import` — not deployed through Asset Bundles the way
-  the retired Lakeflow pipeline was.
+  on a schedule in the live workspace: `bronze_ingest.py` (Google Drive API
+  v3 + service account) and `run_dbt_gold.py` (clones this repo fresh each
+  run, `dbt build`s it). Exported via `databricks workspace export`/imported
+  via `databricks workspace import` — not deployed through Asset Bundles the
+  way the retired Lakeflow pipeline was. `bronze_ingest_v1_retired.py` is the
+  earlier version that used Databricks' Unity Catalog Google Drive Beta
+  connector — abandoned after it proved structurally unable to support
+  unattended scheduled runs (see `PIPELINE_ARCHITECTURE.md` for the full
+  diagnosis).
 - `healthkit-ingest-func/` — **retired**, Azure Function ingestion (Health
-  Auto Export → HTTPS POST → ADLS). Replaced by the Google Drive connector;
+  Auto Export → HTTPS POST → ADLS). Replaced by Google Drive-based ingestion;
   kept in the repo as a reference implementation, not currently deployed.
 - `databricks/healthkit_pipeline/` — **retired**, Databricks Lakeflow
   Declarative Pipeline (Bronze → Silver with Auto CDC dedup). Replaced by

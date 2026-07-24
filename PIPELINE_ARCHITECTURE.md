@@ -42,7 +42,7 @@ of a rigid `from_json` schema — necessary because HealthKit metric shapes
 are genuinely heterogeneous (most readings are `{source, date, qty}`, but
 `sleep_analysis` has no `qty` at all, `core`/`rem`/`deep`/`awake` instead).
 Verified end-to-end at real scale: **1M+ rows** through `base_healthkit_metrics`,
-all 25 dbt tests passing.
+all 26 dbt tests passing.
 
 **Ingestion trigger also changed**: Auto Health Export now syncs to Google
 Drive instead of POSTing to a custom HTTPS endpoint. This drops the Azure
@@ -354,7 +354,7 @@ vs. the calendar span between first and last (`coverage_pct`), and
 `days_since_last_data` (staleness). Answers "is every metric still syncing,"
 independent of any dashboard — this is the table you'd alert on.
 
-### Tests (currently 25/25 passing, verified at ~1M rows in Silver)
+### Tests (currently 26/26 passing, verified at ~1M rows in Silver)
 - `not_null` + `accepted_values` (fixed list of the 24 known HealthKit
   metric names) on `stg_healthkit_metrics.metric_name`
 - `not_null` on `metric_date` / `value`
@@ -364,6 +364,14 @@ independent of any dashboard — this is the table you'd alert on.
   originally on the Lakeflow Silver table): warns past 26 hours stale, errors
   past 50 — tuned around an expected roughly-daily sync cadence with slack
   for missed days
+- **Completeness check** (`assert_every_bronze_file_produces_silver_rows`,
+  added 2026-07-24): every distinct `_source_file` in Bronze must produce at
+  least one row in `base_healthkit_metrics`. A different test *category*
+  from everything else here — row-level tests (`not_null`, `accepted_values`,
+  etc.) can only validate rows that exist; this one catches a Bronze file
+  that landed successfully but silently produced zero downstream rows, which
+  is exactly what happened the same day this test was added (see "Current
+  architecture" above) and none of the other 25 tests could have caught
 
 ---
 

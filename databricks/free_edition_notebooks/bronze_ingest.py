@@ -84,7 +84,15 @@ for f in new_files:
     done = False
     while not done:
         _, done = downloader.next_chunk()
-    content = buf.getvalue().decode("utf-8")
+    raw_content = buf.getvalue().decode("utf-8")
+    # The raw export file is {"data": {"metrics": [...]}} -- the pre-existing
+    # rows in this table (landed by the old Auto Loader-based ingestion) store
+    # only the inner "data" object as the `data` column's content, one level
+    # flattened vs. the raw file. base_healthkit_metrics.sql's `payload:metrics`
+    # path assumes that flattened shape. Unwrap here to match it, or new rows
+    # silently fail to explode (found 2026-07-24: 3 days of real weight/metric
+    # data landed in Bronze but produced zero rows in Silver until this fix).
+    content = json.dumps(json.loads(raw_content)["data"])
     rows.append(Row(
         data=content,
         _rescued_data=None,

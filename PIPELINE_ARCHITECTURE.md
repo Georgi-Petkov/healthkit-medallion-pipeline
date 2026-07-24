@@ -80,6 +80,28 @@ test of the new ingestion path before the folder ID was corrected. The old
 connector-based notebook is kept as `bronze_ingest_v1_retired.py` for
 reference, not deployed.
 
+**A second, more subtle bug from the same fix, caught the same day**: the
+new ingestion script initially stored each downloaded file's **raw, unwrapped
+JSON** (`{"data": {"metrics": [...]}}`) into Bronze's `data` column. The
+451 pre-existing rows (landed by the old Auto Loader-based ingestion) store
+one level flattened — just the inner `{"metrics": [...]}` — because Spark's
+JSON reader had auto-unwrapped the file's top-level `data` key into the
+column of the same name. `base_healthkit_metrics.sql`'s `payload:metrics`
+path assumes that flattened shape, correctly, for all 451 existing rows.
+Three newly-ingested files (weight and other metrics for 2026-07-22 through
+07-24) landed successfully in Bronze — genuinely present, correctly parsed
+JSON — but produced **zero rows** in Silver, because the extra nesting level
+meant `payload:metrics` resolved to nothing for just those three rows.
+Nothing errored; Bronze looked complete, Gold looked "not refreshed" but was
+actually reflecting real (empty) results from genuinely fresh source data —
+the kind of silent gap that's easy to miss without directly comparing raw
+source content against what a downstream table actually contains. Found by
+tracing a single missing week's data backward: Gold → Silver view →
+`base_healthkit_metrics` → the raw Bronze `data` column's actual structure,
+comparing an old row against a new one directly. Fixed by unwrapping the
+`data` key before storing, matching the existing convention; the three
+malformed rows were deleted and re-ingested correctly.
+
 **What this rebuild changed vs. the original design** (see the original
 Layer 1 below for the design being traded off against):
 - **Dedup is reimplemented, differently keyed.** The original Lakeflow

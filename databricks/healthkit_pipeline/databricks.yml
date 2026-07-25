@@ -1,6 +1,12 @@
 bundle:
   name: healthkit_pipeline
 
+# This bundle is retired -- see PIPELINE_ARCHITECTURE.md's "Original design"
+# section. Not deployed (Free Edition has no classic clusters, which this
+# Lakeflow pipeline needs). Host below updated only so VS Code's Databricks
+# extension, which auto-detects this folder as the workspace's only bundle,
+# points at the real current workspace instead of the deleted Azure one.
+
 include:
   - resources/*.yml
 
@@ -9,4 +15,4 @@ targets:
     mode: development
     default: true
     workspace:
-      host: https://adb-7405605320524740.0.azuredatabricks.net
+      host: https://dbc-8cc7279d-8e43.cloud.databricks.com

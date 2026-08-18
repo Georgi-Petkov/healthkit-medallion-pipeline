@@ -8,11 +8,17 @@
 # consent, so it doesn't have that failure mode.
 #
 # Credentials: a service account JSON key, stored in the healthkit-dbt secret
-# scope, for a Google Cloud project with the Drive API enabled. The Health Auto
-# Export sync folder's "Raw data" subfolder is shared with the service
-# account's email as Viewer -- the top-level shared folder only contains that
-# one subfolder, so FOLDER_ID below points at the subfolder directly, not the
-# folder that was originally shared.
+# scope, for a Google Cloud project with the Drive API enabled. The target
+# folder is shared with the service account's email as Viewer.
+#
+# FOLDER_ID changed 2026-08-18: Health Auto Export turned out to be syncing
+# into a different Drive folder than the one originally shared with this
+# service account (a stale duplicate "Health Auto Export" folder existed from
+# 2025-10-11, predating this project; the app silently reverted to writing
+# into a "New Folder" under it at some point after 2026-08-02, so nothing
+# ingested for two weeks despite the job succeeding daily -- 0 new files is
+# a normal, non-erroring result). Repointed at the folder the app is actually
+# writing to, rather than fighting the app's destination choice again.
 
 # MAGIC %pip install google-api-python-client google-auth
 
@@ -22,7 +28,7 @@ dbutils.library.restartPython()
 
 # COMMAND ----------
 
-FOLDER_ID = "13KCnFmFmNYJqKwONaW1fABkfUoP96H7I"  # "Raw data" subfolder
+FOLDER_ID = "1eDnSR0rDEuO4c2f2uf-ow1B3BCcvCGwY"  # Health Auto Export's actual sync target
 TARGET_TABLE = "workspace.healthkit.bronze_health_export"
 
 # COMMAND ----------
@@ -37,6 +43,7 @@ credentials = service_account.Credentials.from_service_account_info(
     sa_info, scopes=["https://www.googleapis.com/auth/drive.readonly"]
 )
 drive = build("drive", "v3", credentials=credentials)
+print(f"Reading Drive as service account: {credentials.service_account_email}")
 
 # COMMAND ----------
 

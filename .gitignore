@@ -20,6 +20,12 @@ logs/
 # Databricks Asset Bundles
 .databricks/
 
+# Terraform
+terraform/.terraform/
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/*.tfvars
+
 # Jupyter
 .ipynb_checkpoints/
 

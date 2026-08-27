@@ -41,6 +41,11 @@ since it's the more hardened of the two).
 - `dbt/healthkit/` — the whole transform pipeline that's actually live:
   Bronze→Silver VARIANT-explode model (with dedup), Silver→Gold transforms,
   tests, docs
+- `terraform/` — manages the two live daily Databricks Jobs
+  (`healthkit-bronze-daily-ingest`, `healthkit-gold-daily-refresh`) as code,
+  imported from the workspace rather than recreated. See
+  [`terraform/README.md`](terraform/README.md) for scope, auth, and how to
+  redo the import on a fresh workspace.
 - `databricks/free_edition_notebooks/` — the two notebooks that actually run
   on a schedule in the live workspace: `bronze_ingest.py` (Google Drive API
   v3 + service account) and `run_dbt_gold.py` (clones this repo fresh each

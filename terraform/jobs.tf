@@ -12,6 +12,10 @@ resource "databricks_job" "bronze_ingest" {
     enabled = true
   }
 
+  email_notifications {
+    on_failure = ["2georgipetkov@gmail.com"]
+  }
+
   schedule {
     quartz_cron_expression = "0 0 5 * * ?"
     timezone_id            = "Europe/Copenhagen"
@@ -35,6 +39,10 @@ resource "databricks_job" "gold_refresh" {
 
   queue {
     enabled = true
+  }
+
+  email_notifications {
+    on_failure = ["2georgipetkov@gmail.com"]
   }
 
   schedule {

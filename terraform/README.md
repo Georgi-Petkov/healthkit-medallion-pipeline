@@ -1,18 +1,24 @@
 # Terraform
 
 Manages the two live daily Databricks Jobs (`healthkit-bronze-daily-ingest`,
-`healthkit-gold-daily-refresh`) as code, on the same Databricks Free Edition
-workspace the rest of this repo runs on.
+`healthkit-gold-daily-refresh`) plus a freshness alert, as code, on the same
+Databricks Free Edition workspace the rest of this repo runs on.
 
 ## Scope
 
-Only `databricks_job` resources against the existing workspace. No cloud
-provider resources (AWS/Azure/GCP), no account-level Databricks resources —
-Free Edition doesn't expose an account console or account API, so none of
-that is reachable from here anyway. Nothing here can incur cost: Free
-Edition has no billing attached (quota-throttled, not metered), and this
-config only touches job *definitions* already running for free, it doesn't
-create new compute.
+`databricks_job` and `databricks_alert_v2` resources against the existing
+workspace. The two jobs each have `email_notifications.on_failure` set, so
+a job that errors (like `healthkit-gold-daily-refresh` did for 3 days in
+Aug 2026 on a stale credential) actually notifies someone instead of
+failing in silence. The alert (`gold_data_staleness`) covers the other
+failure class those can't: a job that reports SUCCESS while silently
+producing no/stale data — see the comment in `alerts.tf` for how it works.
+No cloud provider resources (AWS/Azure/GCP), no account-level Databricks
+resources — Free Edition doesn't expose an account console or account API,
+so none of that is reachable from here anyway. Nothing here can incur
+cost: Free Edition has no billing attached (quota-throttled, not
+metered), and this config only touches job/alert *definitions*, it
+doesn't create new compute.
 
 ## Auth
 

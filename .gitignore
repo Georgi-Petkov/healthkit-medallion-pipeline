@@ -33,3 +33,10 @@ terraform/*.tfvars
 .env
 *.pem
 *.key
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
+
+# Playwright MCP's local trace cache (console logs, page snapshots) —
+# pure local debugging output, regenerates automatically, never commit.
+.playwright-mcp/

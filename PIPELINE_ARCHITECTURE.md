@@ -352,7 +352,41 @@ steps swung from −25.2% to +28.8% to +17.4% over three consecutive weeks.
 mart: per metric, datapoint count, first/last date seen, `days_with_data`
 vs. the calendar span between first and last (`coverage_pct`), and
 `days_since_last_data` (staleness). Answers "is every metric still syncing,"
-independent of any dashboard — this is the table you'd alert on.
+independent of any dashboard — and as of 2026-08-27, it's the table two
+independent alerting paths both key off (see "Monitoring & alerting" below).
+
+### Monitoring & alerting (added 2026-08-27)
+
+Prompted by `healthkit-gold-daily-refresh` failing silently for 3 days on a
+stale credential before anyone noticed — nothing was watching. Two layers
+now cover the two distinct ways a pipeline goes quiet:
+
+- **Loud-error case** — `email_notifications.on_failure` on both daily jobs
+  (`terraform/jobs.tf`), for when a job actually errors out.
+- **Silent-success case** — the failure mode those can't catch: a job
+  reporting SUCCESS while quietly producing no/stale data, exactly what
+  happened in the Google Drive folder mixup (`fixed 8bf2841`), where the
+  ingest job logged "0 new files" as a normal success every day for two
+  weeks. Covered two ways, both keyed off the same
+  `workspace.healthkit_gold.genie_status` view (derived from
+  `fct_metric_freshness`), so they can never disagree about what counts as
+  stale:
+  - A `databricks_alert_v2` (`gold_data_staleness`, `terraform/alerts.tf`)
+    on its own schedule (1h after the daily gold refresh), independent of
+    both jobs' own credentials so it can't fail the same way they did.
+  - A **hard freshness gate** on the HealthKit Genie space
+    (`databricks/healthkit_pipeline/scripts/genie_freshness_gate.sh`).
+    Revoking SQL grants doesn't work here — the workspace owner bypasses
+    Unity Catalog ACLs entirely — so instead the script swaps the Genie
+    space's `data_sources.tables` down to the single status view whenever a
+    scheduled refresh has genuinely failed, structurally cutting off access
+    to real data rather than relying on an LLM instruction to decline.
+    Hardened the same day against its own silent-failure mode: an empty or
+    failed SQL result used to fall through to "OK, restore full access" by
+    default, so every step now asserts its own success explicitly and
+    aborts loudly otherwise. Verified live in both directions — blocked
+    state returns "no available data," restored state answers from real
+    Gold tables.
 
 ### Tests (currently 26/26 passing, verified at ~1M rows in Silver)
 - `not_null` + `accepted_values` (fixed list of the 24 known HealthKit
@@ -436,8 +470,6 @@ used to be here (Gold not scheduled, CI stale, no dedup, notebook not in
 git) is closed — see "Current architecture" at the top of this document for
 what replaced each. What's still genuinely open:
 
-- No alerting is wired to `fct_metric_freshness` — the data exists to power
-  an alert, but nothing currently reads it proactively.
 - Silver has no reprocessing/backfill tooling beyond re-running the whole
   pipeline; there's no targeted "reprocess just this date range" path.
 - No SCD Type 2 / change-history table in the current live design — see the
@@ -466,10 +498,11 @@ what replaced each. What's still genuinely open:
   SCD Type 2 equivalent yet — the honest answer is "no versioned history
   today," and a dbt snapshot over `base_healthkit_metrics` is the natural way
   to rebuild that if it's needed again.
-- *"What would you build next?"* → wire `fct_metric_freshness` to an actual
-  alert, add a dbt snapshot for change history, enable branch protection.
-  (CI already has its own dedicated Databricks token, separate from local
-  dev's, as of 2026-07-22 — see CI/CD above.)
+- *"What would you build next?"* → add a dbt snapshot for change history,
+  enable branch protection. (Freshness alerting is done, as of 2026-08-27 —
+  see "Monitoring & alerting" above. CI already has its own dedicated
+  Databricks token, separate from local dev's, as of 2026-07-22 — see CI/CD
+  above.)
 - *"Walk me through a real production bug you debugged"* → the Beta connector
   incident (2026-07-24, "Current architecture" section above): a job that
   passed manual testing but failed every unattended scheduled run, same

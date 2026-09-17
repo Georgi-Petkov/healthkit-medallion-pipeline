@@ -1,18 +1,35 @@
--- For any (metric_name, metric_date) where Health Auto Export sent a daily
--- rollup datapoint, fct_daily_activity_summary's value for that metric/day
--- must exactly equal the rollup's own raw value - never a sum/combination
--- with the intraday breakdown points. This is a direct, magnitude-blind
--- check on the exact invariant broken by the bug fixed in 3e672c2 (rollup +
--- intraday summed together, roughly doubling every daily figure). Because
--- it never judges plausibility, it can never flag a real value no matter
--- how extreme a day was - it only catches the aggregation logic doing the
--- wrong thing.
+-- is_daily_rollup rows are never a genuine daily total in this data - verified
+-- empirically (2026-09-17) across the full history: every metric, every
+-- midnight-timestamped row is a near-zero fraction (0-0.4%) of that day's
+-- real intraday sum, with the exact same JSON shape as an ordinary sample.
+-- See fct_daily_activity_summary.sql for the full explanation. This is the
+-- inverse of the invariant this test used to check (assert_daily_totals_
+-- match_rollup_when_present, which encoded the since-disproven assumption
+-- that rollups were authoritative and got fixed 3e672c2 by preferring them).
+--
+-- This guards the corrected behavior going forward: whenever a rollup row
+-- and intraday rows both exist for a (metric_name, metric_date), the mart's
+-- value must match the intraday sum, never the rollup's raw value - so a
+-- regression back to trusting the rollup shows up here immediately.
 
 with rollups as (
 
     select metric_name, metric_date, value as rollup_value
     from {{ ref('stg_healthkit_metrics') }}
     where is_daily_rollup
+
+),
+
+intraday_totals as (
+
+    select metric_name, metric_date, sum(value) as intraday_sum
+    from {{ ref('stg_healthkit_metrics') }}
+    where not is_daily_rollup
+      and metric_name in (
+          'step_count', 'active_energy', 'apple_exercise_time',
+          'apple_stand_time', 'flights_climbed', 'walking_running_distance'
+      )
+    group by metric_name, metric_date
 
 ),
 
@@ -42,7 +59,9 @@ unpivoted as (
 
 )
 
-select r.metric_name, r.metric_date, r.rollup_value, u.mart_value
+select r.metric_name, r.metric_date, r.rollup_value, i.intraday_sum, u.mart_value
 from rollups r
+join intraday_totals i using (metric_name, metric_date)
 join unpivoted u using (metric_name, metric_date)
-where abs(r.rollup_value - u.mart_value) > 0.01
+where abs(u.mart_value - r.rollup_value) < 0.01   -- the mart matched the rollup...
+  and abs(u.mart_value - i.intraday_sum) > 0.01    -- ...instead of the real intraday sum

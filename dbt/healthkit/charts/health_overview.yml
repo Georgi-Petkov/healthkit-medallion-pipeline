@@ -1,0 +1,160 @@
+title: HealthKit overview
+notes: >
+  Daily activity/vitals trend, week-over-week change, and pipeline freshness,
+  read straight from the healthkit_gold marts via ref().
+
+variables:
+  days_back:
+    input: select
+    options:
+      static: [30, 90, 180]
+    default: 90
+
+queries:
+  daily:
+    source: healthkit
+    sql: |
+      SELECT
+        metric_date,
+        total_steps,
+        active_energy_kcal,
+        exercise_minutes,
+        distance_km,
+        avg_heart_rate_bpm,
+        resting_heart_rate_bpm,
+        avg_hrv_ms,
+        weight_kg
+      FROM {{ ref('fct_daily_activity_summary') }}
+      WHERE metric_date >= dateadd(day, -{{ days_back }}, current_date())
+      ORDER BY metric_date
+
+  latest_day:
+    source: healthkit
+    sql: |
+      SELECT
+        total_steps,
+        active_energy_kcal,
+        resting_heart_rate_bpm,
+        avg_hrv_ms
+      FROM {{ ref('fct_daily_activity_summary') }}
+      ORDER BY metric_date DESC
+      LIMIT 1
+
+  weekly:
+    source: healthkit
+    sql: |
+      SELECT
+        week_start,
+        total_steps,
+        active_energy_kcal,
+        avg_resting_heart_rate_bpm,
+        steps_pct_change_vs_prev_week,
+        resting_hr_change_vs_prev_week
+      FROM {{ ref('fct_weekly_trends') }}
+      WHERE week_start >= dateadd(day, -{{ days_back }}, current_date())
+      ORDER BY week_start
+
+  freshness:
+    source: healthkit
+    sql: |
+      SELECT metric_name, days_since_last_data
+      FROM {{ ref('fct_metric_freshness') }}
+      ORDER BY days_since_last_data DESC
+
+charts:
+  k_steps:
+    type: kpi
+    query: latest_day
+    label: Steps, latest day
+    value: total_steps
+    style:
+      value:
+        format: integer
+
+  k_energy:
+    type: kpi
+    query: latest_day
+    label: Active energy, latest day
+    value: active_energy_kcal
+    style:
+      value:
+        format: integer
+
+  k_rhr:
+    type: kpi
+    query: latest_day
+    label: Resting HR, latest day
+    value: resting_heart_rate_bpm
+    style:
+      value:
+        format: integer
+
+  k_hrv:
+    type: kpi
+    query: latest_day
+    label: HRV, latest day
+    value: avg_hrv_ms
+    style:
+      value:
+        format: integer
+
+  steps_trend:
+    type: line
+    query: daily
+    title: Daily steps
+    x: metric_date
+    y: total_steps
+    height: 260
+
+  energy_trend:
+    type: line
+    query: daily
+    title: Daily active energy (kcal)
+    x: metric_date
+    y: active_energy_kcal
+    height: 260
+
+  recovery_trend:
+    type: line
+    query: daily
+    title: Resting HR vs. HRV
+    x: metric_date
+    y: [resting_heart_rate_bpm, avg_hrv_ms]
+    height: 260
+
+  weight_trend:
+    type: line
+    query: daily
+    title: Weight (kg)
+    x: metric_date
+    y: weight_kg
+    height: 260
+
+  weekly_steps_change:
+    type: bar
+    query: weekly
+    title: Weekly steps, % change vs. prior week
+    x: week_start
+    y: steps_pct_change_vs_prev_week
+    style:
+      number_format: percent
+    height: 260
+
+  freshness_table:
+    type: table
+    query: freshness
+    title: Metric freshness (days since last data)
+    style:
+      columns:
+        metric_name:
+          label: Metric
+        days_since_last_data:
+          label: Days stale
+          align: right
+
+rows:
+  - cols: [k_steps, k_energy, k_rhr, k_hrv]
+  - cols: [steps_trend, energy_trend]
+  - cols: [recovery_trend, weight_trend]
+  - weekly_steps_change
+  - freshness_table

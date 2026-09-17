@@ -1,0 +1,16 @@
+# dbt charts project configuration
+#
+# This file anchors your project root. Running `dct serve` from any
+# subdirectory will walk up to find this file and use its directory
+# as the serve root.
+#
+# sources: is the registry of named connections your boards read from.
+# A board picks one with `source: <name>`; it never defines a connection
+# inline. Full list of types and fields: `dct docs sources`.
+#
+sources:
+  # The healthkit dbt project itself — reuses profiles.yml / .env, no new creds.
+  healthkit:
+    type: dbt_profile
+    profile: healthkit
+    target: dev

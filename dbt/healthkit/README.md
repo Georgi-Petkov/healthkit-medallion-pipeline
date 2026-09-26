@@ -13,6 +13,13 @@ Silver -> Gold transforms for the HealthKit medallion pipeline, targeting the
   absolute/percent change vs. the prior week.
 - `models/marts/fct_metric_freshness.sql` - per-metric coverage and
   staleness, for monitoring pipeline health.
+- `models/marts/dim_date.sql` - calendar dimension (one row per day, whole ISO
+  weeks), keyed on `date_day`. Facts join to it on their date columns.
+- `models/marts/dim_metric.sql` - one row per HealthKit metric (display name,
+  category, unit), keyed on `metric_name`.
+
+The `relationships` tests in `models/marts/_marts.yml` declare the fact -> dim
+links; ERD Studio reads them to draw the star schema.
 
 Marts materialize as tables in schema `gold`.
 

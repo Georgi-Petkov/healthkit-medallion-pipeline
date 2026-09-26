@@ -9,6 +9,10 @@ models:
         tests:
           - not_null
           - unique
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
       - name: total_steps
         description: Total step count for the day.
         tests:
@@ -92,6 +96,10 @@ models:
         tests:
           - not_null
           - unique
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
       - name: total_steps
         description: Sum of daily total_steps across the week.
       - name: active_energy_kcal
@@ -125,6 +133,10 @@ models:
         description: Last calendar date in the ISO week.
         tests:
           - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
       - name: weekly_body_fat_change_pp
         description: Change in average body fat percentage vs. the prior week, in percentage points (not percent change) - e.g. 11.5% -> 11.0% is -0.5, not -4.3%.
 
@@ -136,7 +148,102 @@ models:
         tests:
           - not_null
           - unique
+          - relationships:
+              arguments:
+                to: ref('dim_metric')
+                field: metric_name
+      - name: first_date
+        description: Date of the metric's earliest datapoint.
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: last_date
+        description: Date of the metric's most recent datapoint.
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
       - name: days_since_last_data
         description: Days between the metric's most recent datapoint and today. Large values indicate a metric has stopped syncing.
+        tests:
+          - not_null
+
+  - name: dim_date
+    description: >
+      Calendar dimension, one row per day, spanning whole ISO weeks from the first to the
+      last week with data. Keyed on the natural date (date_day) since every fact already
+      carries a real calendar date. Facts join to it on their date column, including the
+      weekly facts via their week-start / week-end date (role-playing).
+    columns:
+      - name: date_day
+        description: Calendar day. Primary key.
+        tests:
+          - not_null
+          - unique
+      - name: year
+        description: Calendar year.
+      - name: quarter
+        description: Calendar quarter, 1-4.
+      - name: month
+        description: Calendar month, 1-12.
+      - name: month_name
+        description: Full English month name, e.g. September.
+      - name: day_of_month
+        description: Day of the month, 1-31.
+      - name: iso_day_of_week
+        description: ISO day of week, 1 = Monday .. 7 = Sunday.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5, 6, 7]
+      - name: day_name
+        description: Full English weekday name, e.g. Monday.
+      - name: is_weekend
+        description: True for Saturday and Sunday.
+      - name: week_start_date
+        description: Monday of the ISO week containing this day.
+        tests:
+          - not_null
+      - name: iso_year
+        description: ISO 8601 year of the week containing this day (the year of that week's Thursday); can differ from year near year boundaries.
+      - name: iso_week
+        description: ISO 8601 week number, 1-53.
+      - name: year_week
+        description: "ISO year-week label, e.g. 2026-W03. Same format as fct_weekly_weight_trends.year_week."
+        tests:
+          - not_null
+
+  - name: dim_metric
+    description: >
+      One row per HealthKit metric: display name and category (defined in the model) plus
+      the unit the metric is reported in (taken from the data). Keyed on metric_name.
+    columns:
+      - name: metric_name
+        description: HealthKit metric identifier, e.g. heart_rate, step_count. Primary key.
+        tests:
+          - not_null
+          - unique
+      - name: display_name
+        description: Human-readable metric name. Null means the metric is not yet described in dim_metric.sql.
+        tests:
+          - not_null
+      - name: metric_category
+        description: Grouping for the metric - one of activity, cardiovascular, mobility, sleep, body_composition, environment.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - activity
+                  - cardiovascular
+                  - mobility
+                  - sleep
+                  - body_composition
+                  - environment
+      - name: unit
+        description: Unit the metric is reported in (lower-cased), e.g. count, kcal, kg, ms.
         tests:
           - not_null

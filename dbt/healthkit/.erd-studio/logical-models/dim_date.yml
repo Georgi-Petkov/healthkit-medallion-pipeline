@@ -1,0 +1,65 @@
+name: dim_date
+schema: healthkit_gold
+description: Calendar dimension, one row per day, spanning whole ISO weeks from the first to the last week with data. Facts
+  join on their date columns (role-playing for the weekly facts).
+grain: One row per calendar day
+modelRole: conformed-dim
+rationale:
+  purpose: Shared calendar so every fact resolves dates and ISO weeks the same way.
+  design: Natural date is the key; every fact already carries a real calendar date so a surrogate key would add a lookup for
+    nothing. Padded to whole ISO weeks so weekly facts' week_start (a Monday) always resolves.
+  roleChoice: 'Conformed dimension: used by all four gold facts.'
+columns:
+- name: date_day
+  dataType: DATE
+  description: Calendar day. Primary key.
+  isPrimaryKey: true
+  isNaturalKey: true
+- name: year
+  dataType: INT
+  description: Calendar year.
+  scdType: 0
+- name: quarter
+  dataType: INT
+  description: Calendar quarter, 1-4.
+  scdType: 0
+- name: month
+  dataType: INT
+  description: Calendar month, 1-12.
+  scdType: 0
+- name: month_name
+  dataType: STRING
+  description: Full English month name.
+  scdType: 0
+- name: day_of_month
+  dataType: INT
+  description: Day of the month, 1-31.
+  scdType: 0
+- name: iso_day_of_week
+  dataType: INT
+  description: ISO day of week, 1 = Monday .. 7 = Sunday.
+  scdType: 0
+- name: day_name
+  dataType: STRING
+  description: Full English weekday name.
+  scdType: 0
+- name: is_weekend
+  dataType: BOOLEAN
+  description: True for Saturday and Sunday.
+  scdType: 0
+- name: week_start_date
+  dataType: DATE
+  description: Monday of the ISO week containing this day.
+  scdType: 0
+- name: iso_year
+  dataType: INT
+  description: ISO 8601 year of the week containing this day (year of that week's Thursday).
+  scdType: 0
+- name: iso_week
+  dataType: INT
+  description: ISO 8601 week number, 1-53.
+  scdType: 0
+- name: year_week
+  dataType: STRING
+  description: ISO year-week label, e.g. 2026-W03. Same format as fct_weekly_weight_trends.year_week.
+  scdType: 0

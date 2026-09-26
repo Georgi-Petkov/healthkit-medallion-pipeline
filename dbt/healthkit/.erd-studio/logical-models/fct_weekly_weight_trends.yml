@@ -1,0 +1,38 @@
+name: fct_weekly_weight_trends
+schema: healthkit_gold
+description: Weekly average weight and body fat over real readings only (no forward-fill), with week-over-week change.
+grain: One row per ISO week
+modelRole: periodic-snapshot
+rationale:
+  purpose: Weight and body-fat trend, mirroring the original WeightReport notebook.
+columns:
+- name: week_end_date
+  dataType: DATE
+  description: Last calendar date in the ISO week that has a reading.
+  isForeignKey: true
+- name: year_week
+  dataType: STRING
+  description: ISO year-week label, e.g. 2026-W03.
+  isPrimaryKey: true
+- name: weight_kg
+  dataType: DOUBLE
+  description: Weekly average body weight, kg.
+  additiveType: non-additive
+- name: weekly_weight_change_kg
+  dataType: DOUBLE
+  description: Change in weekly average weight vs. the prior week, kg.
+  additiveType: non-additive
+- name: body_fat_pct
+  dataType: DOUBLE
+  description: Weekly average body fat, percent.
+  additiveType: non-additive
+- name: weekly_body_fat_change_pp
+  dataType: DOUBLE
+  description: Change in body fat vs. the prior week, percentage points.
+  additiveType: non-additive
+- name: weekly_weight_change_display
+  dataType: STRING
+  description: HTML-formatted coloured arrow for the weight change.
+- name: weekly_body_fat_change_display
+  dataType: STRING
+  description: HTML-formatted coloured arrow for the body-fat change.

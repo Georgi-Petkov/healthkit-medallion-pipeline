@@ -1,0 +1,20 @@
+# ERD Studio manages selectors prefixed with `domain_` whose description ends with "Managed by ERD Studio." — regenerated automatically.
+# Other selectors below are user-managed and preserved across regenerates.
+
+selectors:
+  - name: domain_gold_healthkit_star
+    description: All models in the healthkit_star domain (gold layer). Managed by ERD Studio.
+    definition:
+      union:
+        - method: fqn
+          value: dim_date
+        - method: fqn
+          value: dim_metric
+        - method: fqn
+          value: fct_daily_activity_summary
+        - method: fqn
+          value: fct_weekly_trends
+        - method: fqn
+          value: fct_weekly_weight_trends
+        - method: fqn
+          value: fct_metric_freshness

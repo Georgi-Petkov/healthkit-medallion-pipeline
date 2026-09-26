@@ -1,0 +1,57 @@
+name: fct_daily_activity_summary
+schema: healthkit_gold
+description: One row per calendar day with key activity/vitals metrics pivoted into columns.
+grain: One row per calendar day
+modelRole: periodic-snapshot
+rationale:
+  purpose: Daily dashboard base and the input to fct_weekly_trends.
+columns:
+- name: metric_date
+  dataType: DATE
+  description: Calendar day.
+  isPrimaryKey: true
+  isForeignKey: true
+- name: total_steps
+  dataType: DOUBLE
+  description: Total step count for the day.
+  additiveType: additive
+- name: active_energy_kcal
+  dataType: DOUBLE
+  description: Active (non-basal) energy burned, kcal.
+  additiveType: additive
+- name: exercise_minutes
+  dataType: DOUBLE
+  description: Apple exercise minutes.
+  additiveType: additive
+- name: stand_minutes
+  dataType: DOUBLE
+  description: Total minutes standing.
+  additiveType: additive
+- name: flights_climbed
+  dataType: DOUBLE
+  description: Flights of stairs climbed.
+  additiveType: additive
+- name: distance_km
+  dataType: DOUBLE
+  description: Walking/running distance, km.
+  additiveType: additive
+- name: avg_heart_rate_bpm
+  dataType: DOUBLE
+  description: Average heart rate, bpm.
+  additiveType: non-additive
+- name: resting_heart_rate_bpm
+  dataType: DOUBLE
+  description: Resting heart rate, bpm.
+  additiveType: non-additive
+- name: avg_hrv_ms
+  dataType: DOUBLE
+  description: Average heart rate variability (SDNN), ms.
+  additiveType: non-additive
+- name: weight_kg
+  dataType: DOUBLE
+  description: Body weight, kg.
+  additiveType: non-additive
+- name: metrics_present
+  dataType: BIGINT
+  description: Count of distinct metric types with data that day.
+  additiveType: non-additive

@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 5,
+  "domain": "healthkit_star",
+  "layer": "gold",
+  "description": "Gold star schema for the HealthKit pipeline: four facts conformed on dim_date and dim_metric.",
+  "modelFolder": "models/marts",
+  "logical": {
+    "models": [
+      "dim_date",
+      "dim_metric",
+      "fct_daily_activity_summary",
+      "fct_weekly_trends",
+      "fct_weekly_weight_trends",
+      "fct_metric_freshness"
+    ],
+    "relationships": [
+      {
+        "fromModel": "fct_daily_activity_summary",
+        "fromColumn": "metric_date",
+        "toModel": "dim_date",
+        "toColumn": "date_day",
+        "cardinality": "one-to-one"
+      },
+      {
+        "fromModel": "fct_weekly_trends",
+        "fromColumn": "week_start",
+        "toModel": "dim_date",
+        "toColumn": "date_day",
+        "cardinality": "one-to-one"
+      },
+      {
+        "fromModel": "fct_weekly_weight_trends",
+        "fromColumn": "week_end_date",
+        "toModel": "dim_date",
+        "toColumn": "date_day",
+        "cardinality": "many-to-one"
+      },
+      {
+        "fromModel": "fct_metric_freshness",
+        "fromColumn": "first_date",
+        "toModel": "dim_date",
+        "toColumn": "date_day",
+        "cardinality": "many-to-one"
+      },
+      {
+        "fromModel": "fct_metric_freshness",
+        "fromColumn": "last_date",
+        "toModel": "dim_date",
+        "toColumn": "date_day",
+        "cardinality": "many-to-one"
+      },
+      {
+        "fromModel": "fct_metric_freshness",
+        "fromColumn": "metric_name",
+        "toModel": "dim_metric",
+        "toColumn": "metric_name",
+        "cardinality": "one-to-one"
+      }
+    ]
+  },
+  "viewConfig": {
+    "showFkEdges": true,
+    "positions": {
+      "dim_date": {
+        "x": 539,
+        "y": 273
+      },
+      "dim_metric": {
+        "x": 904,
+        "y": 742
+      },
+      "fct_daily_activity_summary": {
+        "x": 92,
+        "y": 581
+      },
+      "fct_weekly_trends": {
+        "x": -11,
+        "y": -82
+      },
+      "fct_weekly_weight_trends": {
+        "x": 773,
+        "y": -104
+      },
+      "fct_metric_freshness": {
+        "x": 969,
+        "y": 301
+      }
+    },
+    "annotations": [
+      {
+        "id": "937c9959-0c97-4a0a-83ab-ad09511cd7e1",
+        "text": "",
+        "x": 777,
+        "y": 230
+      }
+    ]
+  }
+}

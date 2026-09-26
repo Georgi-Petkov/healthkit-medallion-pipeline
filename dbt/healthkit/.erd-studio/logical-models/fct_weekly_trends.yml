@@ -1,0 +1,53 @@
+name: fct_weekly_trends
+schema: healthkit_gold
+description: Week-over-week activity trend, with absolute and percent change vs. the prior week.
+grain: One row per ISO week
+modelRole: periodic-snapshot
+rationale:
+  purpose: Weekly trend view built on fct_daily_activity_summary.
+columns:
+- name: week_start
+  dataType: TIMESTAMP
+  description: Start of the ISO week (Monday).
+  isPrimaryKey: true
+  isForeignKey: true
+- name: total_steps
+  dataType: DOUBLE
+  description: Sum of daily total_steps across the week.
+  additiveType: additive
+- name: active_energy_kcal
+  dataType: DOUBLE
+  description: Sum of daily active_energy_kcal across the week.
+  additiveType: additive
+- name: exercise_minutes
+  dataType: DOUBLE
+  description: Sum of daily exercise_minutes across the week.
+  additiveType: additive
+- name: avg_heart_rate_bpm
+  dataType: DOUBLE
+  description: Average of daily avg_heart_rate_bpm across the week.
+  additiveType: non-additive
+- name: avg_resting_heart_rate_bpm
+  dataType: DOUBLE
+  description: Average of daily resting_heart_rate_bpm across the week.
+  additiveType: non-additive
+- name: days_with_data
+  dataType: BIGINT
+  description: Days within the week with at least one activity datapoint.
+  additiveType: additive
+- name: steps_change_vs_prev_week
+  dataType: DOUBLE
+  description: total_steps minus the prior week's.
+  additiveType: non-additive
+- name: steps_pct_change_vs_prev_week
+  dataType: DOUBLE
+  description: Percent change in total_steps vs. the prior week.
+  additiveType: non-additive
+- name: active_energy_pct_change_vs_prev_week
+  dataType: DOUBLE
+  description: Percent change in active_energy_kcal vs. the prior week.
+  additiveType: non-additive
+- name: resting_hr_change_vs_prev_week
+  dataType: DOUBLE
+  description: avg_resting_heart_rate_bpm minus the prior week's, bpm.
+  additiveType: non-additive

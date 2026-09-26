@@ -31,6 +31,7 @@ SILVER   dbt views: base_healthkit_metrics → stg_healthkit_metrics
         │  scheduled daily 06:00 Europe/Copenhagen
         ▼
 GOLD     fct_daily_activity_summary / fct_weekly_trends / fct_metric_freshness
+         + dim_date / dim_metric (conformed dimensions the facts join to)
 ```
 
 **Why it changed:** Databricks Free Edition has no classic (all-purpose)
@@ -354,6 +355,20 @@ vs. the calendar span between first and last (`coverage_pct`), and
 `days_since_last_data` (staleness). Answers "is every metric still syncing,"
 independent of any dashboard — and as of 2026-08-27, it's the table two
 independent alerting paths both key off (see "Monitoring & alerting" below).
+
+**`dim_date`** and **`dim_metric`** — the conformed dimensions the facts above
+join to, so the gold layer is a star schema rather than four unrelated
+tables. `dim_date` is one row per day, padded to whole ISO weeks (Monday of
+the first week with data to Sunday of the last) so the weekly facts'
+`week_start` still resolves to a row; the natural date is the key. The weekly
+facts and `fct_metric_freshness.first_date`/`last_date` join to it through
+their own date columns (role-playing). `dim_metric` is one row per HealthKit
+metric with a display name and category defined in the model and the unit
+taken from the data; it is driven from the observed metrics, so a metric that
+shows up before it is described gets a null `display_name` and fails a
+`not_null` test instead of silently dropping out. The fact -> dimension links
+are declared as `relationships` tests in `_marts.yml`, which is also what
+ERD Studio reads to draw the diagram.
 
 ### Monitoring & alerting (added 2026-08-27)
 

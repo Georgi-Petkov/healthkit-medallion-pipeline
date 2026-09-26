@@ -1,0 +1,44 @@
+name: fct_metric_freshness
+schema: healthkit_gold
+description: Per-metric coverage and staleness, for monitoring pipeline/data health.
+grain: One row per HealthKit metric
+modelRole: periodic-snapshot
+rationale:
+  purpose: 'Pipeline health: is every metric still syncing. Feeds the staleness alerts.'
+columns:
+- name: metric_name
+  dataType: STRING
+  description: HealthKit metric identifier.
+  isPrimaryKey: true
+  isForeignKey: true
+- name: datapoint_count
+  dataType: BIGINT
+  description: Total datapoints for the metric.
+  additiveType: additive
+- name: first_date
+  dataType: DATE
+  description: Date of the metric's earliest datapoint.
+  isForeignKey: true
+- name: last_date
+  dataType: DATE
+  description: Date of the metric's most recent datapoint.
+  isForeignKey: true
+- name: last_ingested_at
+  dataType: TIMESTAMP
+  description: Latest ingestion timestamp for the metric.
+- name: days_with_data
+  dataType: BIGINT
+  description: Distinct dates with at least one datapoint.
+  additiveType: additive
+- name: calendar_days_span
+  dataType: BIGINT
+  description: Calendar days between first and last datapoint, inclusive.
+  additiveType: non-additive
+- name: coverage_pct
+  dataType: DOUBLE
+  description: days_with_data as a percent of calendar_days_span.
+  additiveType: non-additive
+- name: days_since_last_data
+  dataType: BIGINT
+  description: Days between the last datapoint and today.
+  additiveType: non-additive

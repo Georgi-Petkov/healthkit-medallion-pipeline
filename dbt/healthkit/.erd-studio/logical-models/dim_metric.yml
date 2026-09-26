@@ -1,0 +1,28 @@
+name: dim_metric
+schema: healthkit_gold
+description: 'One row per HealthKit metric: display name and category (defined in the model) plus the unit taken from the
+  data.'
+grain: One row per HealthKit metric
+modelRole: conformed-dim
+rationale:
+  purpose: Human-readable names and grouping for the 24 HealthKit metric identifiers.
+  design: Driven from observed metrics, not the definitions list, so a metric that appears before it is described gets a null
+    display_name and fails a not_null test instead of vanishing.
+columns:
+- name: metric_name
+  dataType: STRING
+  description: HealthKit metric identifier, e.g. heart_rate. Primary key.
+  isPrimaryKey: true
+  isNaturalKey: true
+- name: display_name
+  dataType: STRING
+  description: Human-readable metric name.
+  scdType: 1
+- name: metric_category
+  dataType: STRING
+  description: activity, cardiovascular, mobility, sleep, body_composition or environment.
+  scdType: 1
+- name: unit
+  dataType: STRING
+  description: Unit the metric is reported in (lower-cased).
+  scdType: 1

@@ -47,25 +47,53 @@ print(f"Reading Drive as service account: {credentials.service_account_email}")
 
 # COMMAND ----------
 
-# Only fetch files not already landed in Bronze -- _source_file already tracks
-# this from the original Auto Loader-based ingestion, reused here so nothing
-# downstream needs to change.
-already_ingested = {
-    row._source_file
-    for row in spark.sql(f"SELECT DISTINCT _source_file FROM {TARGET_TABLE}").collect()
+# Fetch files that are new OR were rewritten after we last ingested them.
+# Health Auto Export overwrites same-named daily files in place (e.g. a
+# backfill or a newly added metric), so skipping by name alone would
+# silently miss the updated content. Silver's dedup (latest _ingested_at
+# wins per metric+timestamp) resolves the re-landed rows.
+last_ingested = {
+    row._source_file: row.last_at
+    for row in spark.sql(
+        f"SELECT _source_file, MAX(_ingested_at) AS last_at FROM {TARGET_TABLE} GROUP BY _source_file"
+    ).collect()
 }
-print(f"{len(already_ingested)} files already in Bronze")
+print(f"{len(last_ingested)} files already in Bronze")
 
 # COMMAND ----------
 
-results = drive.files().list(
-    q=f"'{FOLDER_ID}' in parents and trashed=false",
-    fields="files(id, name)",
-    pageSize=1000,
-).execute()
-all_files = [f for f in results.get("files", []) if f["name"].endswith(".json")]
-new_files = [f for f in all_files if f["name"] not in already_ingested]
-print(f"{len(all_files)} .json files in Drive folder, {len(new_files)} new")
+from datetime import datetime, timezone
+
+all_files, page_token = [], None
+while True:
+    resp = drive.files().list(
+        q=f"'{FOLDER_ID}' in parents and trashed=false",
+        fields="nextPageToken, files(id, name, modifiedTime)",
+        pageSize=1000,
+        pageToken=page_token,
+    ).execute()
+    all_files += [f for f in resp.get("files", []) if f["name"].endswith(".json")]
+    page_token = resp.get("nextPageToken")
+    if not page_token:
+        break
+
+def _modified(f):
+    return datetime.fromisoformat(f["modifiedTime"].replace("Z", "+00:00"))
+
+def _needs_ingest(f):
+    prev = last_ingested.get(f["name"])
+    if prev is None:
+        return True
+    return _modified(f) > prev.replace(tzinfo=timezone.utc)
+
+# If Drive ever holds two files with the same name, keep only the newest.
+newest_by_name = {}
+for f in all_files:
+    if f["name"] not in newest_by_name or _modified(f) > _modified(newest_by_name[f["name"]]):
+        newest_by_name[f["name"]] = f
+
+new_files = [f for f in newest_by_name.values() if _needs_ingest(f)]
+print(f"{len(all_files)} .json files in Drive folder, {len(new_files)} new or updated")
 
 # COMMAND ----------
 
